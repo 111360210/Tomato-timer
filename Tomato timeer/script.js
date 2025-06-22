@@ -21,14 +21,20 @@ class PomodoroTimer {
         // 圖表相關屬性
         this.chartsInitialized = false;
         this.currentFilteredRecords = null;
-        this.currentPeriod = '7';
-        
-        // DOM 元素
+        this.currentPeriod = '7';        // DOM 元素
         this.initializeElements();
         this.initializeEventListeners();
+        
         this.loadData();
         this.updateDisplay();
         this.updateStats();
+        
+        // 清理無效數據
+        this.cleanInvalidData();
+        
+        // 初始化歷史記錄和圖表
+        this.filterHistory('7'); // 預設顯示最近7天的數據
+        this.initializeCharts();
     }    initializeElements() {
         this.timeDisplay = document.getElementById('time-display');
         this.sessionType = document.getElementById('session-type');
@@ -484,16 +490,18 @@ class PomodoroTimer {
                 }
             }, 500);
         }
-    }
-
-    showHistory() {
+    }    showHistory() {
         this.historyModal.style.display = 'block';
-        this.filterHistory('7');
-        this.initializeCharts();
-    }
+        this.filterHistory('7'); // 默認顯示近7天
+    }filterHistory(period) {
+        // 更新按鈕狀態
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.period === period) {
+                btn.classList.add('active');
+            }
+        });
 
-    filterHistory(period) {
-        this.currentPeriod = period;
         const allRecords = this.getAllRecords();
         let filteredRecords = allRecords;
         
@@ -511,20 +519,26 @@ class PomodoroTimer {
         this.displayHistoryRecords(filteredRecords);
         this.displayStatsSummary(filteredRecords);
         this.updateAllCharts();
-    }
-
-    getAllRecords() {
+    }getAllRecords() {
         const records = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key && key.startsWith('pomodoro_')) {
-                const record = JSON.parse(localStorage.getItem(key));
-                records.push(record);
+                try {
+                    const record = JSON.parse(localStorage.getItem(key));
+                    
+                    // 過濾掉無效的記錄
+                    if (record && record.date && !isNaN(new Date(record.date).getTime())) {
+                        records.push(record);
+                    }
+                } catch (error) {
+                    console.warn('解析記錄失敗:', key, error);
+                }
             }
         }
         
         return records.sort((a, b) => new Date(b.date) - new Date(a.date));
-    }    displayHistoryRecords(records) {
+    }displayHistoryRecords(records) {
         // 先顯示統計摘要
         this.displayStatsSummary(records);
         
@@ -545,10 +559,9 @@ class PomodoroTimer {
                 <p><strong>完成番茄:</strong> ${record.totalPomodoros}個</p>
                 <details style="margin-top: 10px;">
                     <summary style="cursor: pointer; color: var(--secondary-color);">查看詳細任務</summary>
-                    <div style="margin-top: 10px;">
-                        ${record.sessions.map(session => `
+                    <div style="margin-top: 10px;">                        ${(record.sessions || []).map(session => `
                             <div style="margin: 5px 0; padding: 5px; background: #f8f9fa; border-radius: 4px;">
-                                <strong>${session.task}</strong> - ${session.duration}分鐘 (${session.completedAt})
+                                <strong>${session.task || '未指定任務'}</strong> - ${session.duration}分鐘 (${session.completedAt})
                             </div>
                         `).join('')}
                     </div>
@@ -613,18 +626,22 @@ class PomodoroTimer {
         const existingStats = document.querySelector('.stats-grid');
         if (existingStats) {
             existingStats.remove();
-        }
-        
+        }        
         this.historyContent.insertAdjacentHTML('beforebegin', statsHtml);
-    }    // 初始化圖表
+    }
+
+    // 初始化圖表
     initializeCharts() {
-        if (this.chartsInitialized) return;
+        if (this.chartsInitialized) {
+            return;
+        }
         
         // 等待DOM完全載入
         setTimeout(() => {
             try {
                 // 專注時間趨勢圖
                 const focusTrendCtx = document.getElementById('focus-trend-chart');
+                
                 if (focusTrendCtx) {
                     this.focusTrendChart = new Chart(focusTrendCtx, {
                         type: 'line',
@@ -670,10 +687,9 @@ class PomodoroTimer {
                             }
                         }
                     });
-                }
-
-                // 任務時間分布圖
+                }                // 任務時間分布圖
                 const taskBreakdownCtx = document.getElementById('task-breakdown-chart');
+                
                 if (taskBreakdownCtx) {
                     this.taskBreakdownChart = new Chart(taskBreakdownCtx, {
                         type: 'doughnut',
@@ -758,12 +774,14 @@ class PomodoroTimer {
                 
                 this.updateAllCharts();
             } catch (error) {
-                console.error('初始化圖表時發生錯誤:', error);
+                console.error('❌ 初始化圖表時發生錯誤:', error);
             }
         }, 500);
     }    // 更新所有圖表
     updateAllCharts() {
-        if (!this.chartsInitialized || !this.currentFilteredRecords) return;
+        if (!this.chartsInitialized || !this.currentFilteredRecords) {
+            return;
+        }
         
         this.updateFocusTrendChart();
         this.updateTaskBreakdownChart();
@@ -801,9 +819,7 @@ class PomodoroTimer {
         } catch (error) {
             console.error('更新趨勢圖時發生錯誤:', error);
         }
-    }
-
-    // 更新任務時間分布圖
+    }    // 更新任務時間分布圖
     updateTaskBreakdownChart() {
         if (!this.taskBreakdownChart) return;
         
@@ -813,10 +829,12 @@ class PomodoroTimer {
             
             // 統計每個任務的總時間
             records.forEach(record => {
-                record.sessions.forEach(session => {
-                    const task = session.task || '未指定任務';
-                    taskTimes[task] = (taskTimes[task] || 0) + session.duration;
-                });
+                if (record.sessions && Array.isArray(record.sessions)) {
+                    record.sessions.forEach(session => {
+                        const task = session.task || '未指定任務';
+                        taskTimes[task] = (taskTimes[task] || 0) + (session.duration || 0);
+                    });
+                }
             });
             
             const sortedTasks = Object.entries(taskTimes)
@@ -1014,6 +1032,37 @@ class PomodoroTimer {
 
     saveCurrentSession() {
         this.saveData();
+    }
+
+    // 清理無效數據的方法
+    cleanInvalidData() {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('pomodoro_') && key !== 'pomodoro_state') {
+                try {
+                    const record = JSON.parse(localStorage.getItem(key));
+                    if (!record || !record.date || isNaN(new Date(record.date).getTime())) {
+                        keysToRemove.push(key);
+                        console.log('標記要清理的無效數據:', key, record);
+                    }
+                } catch (error) {
+                    keysToRemove.push(key);
+                    console.log('標記要清理的損壞數據:', key);
+                }
+            }
+        }
+        
+        keysToRemove.forEach(key => {
+            localStorage.removeItem(key);
+            console.log('已清理無效數據:', key);
+        });
+        
+        if (keysToRemove.length > 0) {
+            console.log(`✅ 清理完成，共清理 ${keysToRemove.length} 個無效記錄`);
+            // 清理後重新更新統計
+            this.updateStats();
+        }
     }
 
     // 獲取常用任務統計
@@ -1244,6 +1293,5 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => {
         timer.saveData();
     }, 30000); // 每30秒保存一次
-    
-    console.log('🍅 番茄計時器已載入！');
+      console.log('🍅 番茄計時器已載入！');
 });

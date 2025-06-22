@@ -431,16 +431,24 @@ class PomodoroTimer {
         if (!this.isRunning && !this.isPaused) {
             this.start();
         }
-    }
-
-    getAllRecords() {
+    }    getAllRecords() {
         const records = [];
         const keys = Object.keys(localStorage);
         
         keys.forEach(key => {
             if (key.startsWith('pomodoro_') && key !== 'pomodoro_state') {
-                const dayRecords = JSON.parse(localStorage.getItem(key) || '[]');
-                records.push(...dayRecords);
+                try {
+                    const dayRecords = JSON.parse(localStorage.getItem(key) || '[]');
+                    if (Array.isArray(dayRecords)) {
+                        // 過濾掉無效的記錄
+                        const validRecords = dayRecords.filter(record => 
+                            record && record.time && !isNaN(new Date(record.time).getTime())
+                        );
+                        records.push(...validRecords);
+                    }
+                } catch (error) {
+                    console.warn('解析記錄失敗:', key, error);
+                }
             }
         });
         
