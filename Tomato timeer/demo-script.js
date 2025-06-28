@@ -186,11 +186,28 @@ class PomodoroTimer {
     }
 
     start() {
+        // 檢查是否有輸入專注項目（僅在專注時間時檢查）
+        const currentTask = this.currentTask.value.trim();
+        if (!currentTask && !this.isPaused && this.currentSession === 'focus') {
+            // 如果沒有輸入專注項目且不是從暫停狀態恢復且是專注時間，顯示通知
+            this.showTaskInputWarning();
+            return;
+        }
+
         if (this.isPaused) {
             this.isPaused = false;
         } else {
             this.currentTime = this.modes[this.currentMode][this.currentSession] * 60;
             this.totalTime = this.currentTime;
+            
+            // 根據不同會話類型顯示相應的通知
+            if (this.currentSession === 'focus') {
+                this.showStartFocusNotification(currentTask || '未指定任務');
+            } else if (this.currentSession === 'break') {
+                this.showStartBreakNotification('短休息時間');
+            } else if (this.currentSession === 'long-break') {
+                this.showStartBreakNotification('長休息時間');
+            }
         }
         
         this.isRunning = true;
@@ -1207,6 +1224,93 @@ class PomodoroTimer {
         };
         
         reader.readAsText(file);
+    }
+
+    // 顯示任務輸入警告通知
+    showTaskInputWarning() {
+        const notification = document.createElement('div');
+        notification.className = 'task-warning-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <div class="notification-icon">⚠️</div>
+                <div class="notification-message">請先輸入您要專注的任務項目</div>
+                <div class="notification-actions">
+                    <button class="notification-btn focus-input-btn" onclick="this.parentElement.parentElement.parentElement.remove(); document.getElementById('current-task').focus();">
+                        好的，去輸入
+                    </button>
+                    <button class="notification-btn secondary" onclick="this.parentElement.parentElement.parentElement.remove();">
+                        稍後再說
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // 10秒後自動關閉
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 10000);
+    }
+
+    // 顯示開始專注的通知
+    showStartFocusNotification(taskName) {
+        const notification = document.createElement('div');
+        notification.className = 'start-focus-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <div class="notification-icon">🍅</div>
+                <div class="notification-message">
+                    <div class="focus-title">開始專注時間！</div>
+                    <div class="focus-task">${taskName}</div>
+                </div>
+                <div class="notification-actions">
+                    <button class="notification-btn" onclick="this.parentElement.parentElement.parentElement.remove();">
+                        專注開始
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // 3秒後自動關閉
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 3000);
+    }
+
+    // 顯示開始休息的通知
+    showStartBreakNotification(breakType) {
+        const notification = document.createElement('div');
+        notification.className = 'start-break-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <div class="notification-icon">${breakType.includes('長') ? '😴' : '☕'}</div>
+                <div class="notification-message">
+                    <div class="break-title">休息時間開始！</div>
+                    <div class="break-type">${breakType}</div>
+                </div>
+                <div class="notification-actions">
+                    <button class="notification-btn" onclick="this.parentElement.parentElement.parentElement.remove();">
+                        好的，休息一下
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // 3秒後自動關閉
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 3000);
     }
 }
 

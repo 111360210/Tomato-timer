@@ -175,12 +175,29 @@ class PomodoroTimer {
             }
         });
     }    start() {
+        // 檢查是否有輸入專注項目（僅在專注時間時檢查）
+        const currentTask = this.currentTask.value.trim();
+        if (!currentTask && !this.isPaused && this.currentSession === 'focus') {
+            // 如果沒有輸入專注項目且不是從暫停狀態恢復且是專注時間，顯示通知
+            this.showTaskInputWarning();
+            return;
+        }
+
         if (this.isPaused) {
             // 從暫停狀態恢復
             this.isPaused = false;
         } else if (!this.isRunning) {
             // 開始新的計時
             this.setupSession();
+            
+            // 根據不同會話類型顯示相應的通知
+            if (this.currentSession === 'focus') {
+                this.showStartFocusNotification(currentTask || '未指定任務');
+            } else if (this.currentSession === 'break') {
+                this.showStartBreakNotification('短休息時間');
+            } else if (this.currentSession === 'long-break') {
+                this.showStartBreakNotification('長休息時間');
+            }
         }
 
         this.isRunning = true;
@@ -961,12 +978,33 @@ class PomodoroTimer {
                 if (!data.records || !Array.isArray(data.records)) {
                     throw new Error('無效的數據格式');
                 }
-                  // 將匯入的數據保存到 localStorage
+                
+                // 先清理要匯入日期範圍內的既有數據，避免重複
+                const importDates = data.records.map(record => record.date);
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('pomodoro_')) {
+                        try {
+                            const existingRecord = JSON.parse(localStorage.getItem(key));
+                            if (existingRecord && existingRecord.date && importDates.includes(existingRecord.date)) {
+                                localStorage.removeItem(key);
+                                console.log(`清理既有數據: ${key}`);
+                                i--; // 因為移除了項目，需要調整索引
+                            }
+                        } catch (error) {
+                            console.warn(`清理數據時出錯: ${key}`, error);
+                        }
+                    }
+                }
+                
+                // 將匯入的數據保存到 localStorage
                 data.records.forEach(record => {
                     // 只處理有 date 屬性的記錄，跳過狀態記錄
                     if (record.date && typeof record.date === 'string') {
-                        const dateKey = record.date.split('T')[0]; // 只取日期部分
+                        // 直接使用完整的日期字串作為key的一部分
+                        const dateKey = record.date;
                         localStorage.setItem(`pomodoro_${dateKey}`, JSON.stringify(record));
+                        console.log(`匯入數據: pomodoro_${dateKey}`);
                     }
                 });
                 
@@ -1143,6 +1181,93 @@ class PomodoroTimer {
         }, 1000);
         
         console.log(`✅ 已選擇任務: ${task}`);
+    }
+
+    // 顯示任務輸入警告通知
+    showTaskInputWarning() {
+        const notification = document.createElement('div');
+        notification.className = 'task-warning-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <div class="notification-icon">⚠️</div>
+                <div class="notification-message">請先輸入您要專注的任務項目</div>
+                <div class="notification-actions">
+                    <button class="notification-btn focus-input-btn" onclick="this.parentElement.parentElement.parentElement.remove(); document.getElementById('current-task').focus();">
+                        好的，去輸入
+                    </button>
+                    <button class="notification-btn secondary" onclick="this.parentElement.parentElement.parentElement.remove();">
+                        稍後再說
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // 10秒後自動關閉
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 10000);
+    }
+
+    // 顯示開始專注的通知
+    showStartFocusNotification(taskName) {
+        const notification = document.createElement('div');
+        notification.className = 'start-focus-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <div class="notification-icon">🍅</div>
+                <div class="notification-message">
+                    <div class="focus-title">開始專注時間！</div>
+                    <div class="focus-task">${taskName}</div>
+                </div>
+                <div class="notification-actions">
+                    <button class="notification-btn" onclick="this.parentElement.parentElement.parentElement.remove();">
+                        專注開始
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // 3秒後自動關閉
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 3000);
+    }
+
+    // 顯示開始休息的通知
+    showStartBreakNotification(breakType) {
+        const notification = document.createElement('div');
+        notification.className = 'start-break-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <div class="notification-icon">${breakType.includes('長') ? '😴' : '☕'}</div>
+                <div class="notification-message">
+                    <div class="break-title">休息時間開始！</div>
+                    <div class="break-type">${breakType}</div>
+                </div>
+                <div class="notification-actions">
+                    <button class="notification-btn" onclick="this.parentElement.parentElement.parentElement.remove();">
+                        好的，休息一下
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // 3秒後自動關閉
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 3000);
     }
 }
 
